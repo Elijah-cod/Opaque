@@ -24,7 +24,8 @@ export async function deriveAuthVerifierB64(args: {
 
   // Derive raw bits; server stores only the verifier bytes (base64).
   const bits = await subtle.deriveBits(
-    { name: "PBKDF2", salt: args.authSalt, iterations, hash: PBKDF2_HASH },
+    // Some TS libs are overly strict about ArrayBuffer vs SharedArrayBuffer; Uint8Array is fine at runtime.
+    { name: "PBKDF2", salt: args.authSalt as unknown as BufferSource, iterations, hash: PBKDF2_HASH },
     passwordKey,
     AUTH_BITS,
   );

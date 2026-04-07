@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     sql: `SELECT auth_salt_b64, auth_iterations FROM users WHERE id = ?`,
     args: [parsed.data.userId],
   });
-  const r = row.rows[0] as undefined | { auth_salt_b64: string; auth_iterations: number };
+  const r = row.rows[0] as unknown as undefined | { auth_salt_b64: string; auth_iterations: number };
   if (!r) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   return NextResponse.json({

@@ -55,7 +55,7 @@ export async function deriveAesGcmKey(args: {
   const subtle = requireWebCrypto();
   const iterations = args.iterations ?? PBKDF2_ITERATIONS;
   return await subtle.deriveKey(
-    { name: "PBKDF2", salt: args.salt, iterations, hash: PBKDF2_HASH },
+    { name: "PBKDF2", salt: args.salt as unknown as BufferSource, iterations, hash: PBKDF2_HASH },
     args.passwordKey,
     { name: "AES-GCM", length: AES_KEY_BITS },
     false,
@@ -73,9 +73,13 @@ export async function encryptJson(args: {
   const iv = args.iv ?? randomBytes(AES_GCM_IV_BYTES);
   const plaintext = te.encode(JSON.stringify(args.payload));
   const ciphertext = await subtle.encrypt(
-    { name: "AES-GCM", iv, additionalData: args.additionalData },
+    {
+      name: "AES-GCM",
+      iv: iv as unknown as BufferSource,
+      additionalData: args.additionalData as unknown as BufferSource | undefined,
+    },
     args.key,
-    plaintext,
+    plaintext as unknown as BufferSource,
   );
   return {
     ciphertextB64: bytesToBase64(new Uint8Array(ciphertext)),
@@ -93,9 +97,13 @@ export async function decryptJson<T>(args: {
   const iv = base64ToBytes(args.ivB64);
   const ciphertextBytes = base64ToBytes(args.ciphertextB64);
   const plaintext = await subtle.decrypt(
-    { name: "AES-GCM", iv, additionalData: args.additionalData },
+    {
+      name: "AES-GCM",
+      iv: iv as unknown as BufferSource,
+      additionalData: args.additionalData as unknown as BufferSource | undefined,
+    },
     args.key,
-    ciphertextBytes,
+    ciphertextBytes as unknown as BufferSource,
   );
   return JSON.parse(td.decode(new Uint8Array(plaintext))) as T;
 }

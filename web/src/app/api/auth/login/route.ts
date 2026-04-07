@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     sql: `SELECT auth_verifier_b64 FROM users WHERE id = ?`,
     args: [parsed.data.userId],
   });
-  const row = res.rows[0] as undefined | { auth_verifier_b64: string };
+  const row = res.rows[0] as unknown as undefined | { auth_verifier_b64: string };
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   // Minimal verifier check (prototype). Replace with constant-time compare + session/JWT.

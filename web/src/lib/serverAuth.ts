@@ -24,7 +24,7 @@ export async function requireUserFromHeaders(req: Request): Promise<{ userId: st
     sql: `SELECT auth_verifier_b64 FROM users WHERE id = ?`,
     args: [parsed.data],
   });
-  const row = res.rows[0] as undefined | { auth_verifier_b64: string };
+  const row = res.rows[0] as unknown as undefined | { auth_verifier_b64: string };
   if (!row) throw new Error("unauthorized");
   if (!safeEqual(row.auth_verifier_b64, verifier)) throw new Error("unauthorized");
 
