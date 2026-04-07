@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AUTH_ITERATIONS, AUTH_SALT_BYTES, authSaltToB64, deriveAuthVerifierB64 } from "@/lib/zkAuth";
 import { randomBytes } from "@/lib/zkcrypto";
+import { saveSession } from "@/lib/session";
 
 type Status = { kind: "idle" } | { kind: "working" } | { kind: "ok"; userId: string } | { kind: "error"; message: string };
 
@@ -44,6 +45,7 @@ export default function AuthPage() {
       }
       setUserId(data.userId);
       setMode("unlock");
+      saveSession({ userId: data.userId, authVerifierB64 });
       setStatus({ kind: "ok", userId: data.userId });
     } catch (e) {
       setStatus({ kind: "error", message: e instanceof Error ? e.message : "unknown_error" });
@@ -80,6 +82,7 @@ export default function AuthPage() {
       const data = (await res.json().catch(() => null)) as null | { ok?: boolean; error?: string };
       if (!res.ok || !data?.ok) throw new Error(data?.error ?? "login_failed");
 
+      saveSession({ userId, authVerifierB64 });
       setStatus({ kind: "ok", userId });
     } catch (e) {
       setStatus({ kind: "error", message: e instanceof Error ? e.message : "unknown_error" });
