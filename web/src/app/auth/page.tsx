@@ -7,6 +7,16 @@ import { saveSession } from "@/lib/session";
 
 type Status = { kind: "idle" } | { kind: "working" } | { kind: "ok"; userId: string } | { kind: "error"; message: string };
 
+async function readApiError(res: Response): Promise<string> {
+  const text = await res.text().catch(() => "");
+  try {
+    const json = JSON.parse(text) as { error?: string; detail?: string };
+    return [json.error, json.detail].filter(Boolean).join(": ") || `http_${res.status}`;
+  } catch {
+    return text || `http_${res.status}`;
+  }
+}
+
 export default function AuthPage() {
   const [mode, setMode] = useState<"register" | "unlock">("register");
   const [userId, setUserId] = useState("");
@@ -40,9 +50,7 @@ export default function AuthPage() {
         }),
       });
       const data = (await res.json().catch(() => null)) as null | { userId?: string; error?: string };
-      if (!res.ok || !data?.userId) {
-        throw new Error(data?.error ?? "register_failed");
-      }
+      if (!res.ok || !data?.userId) throw new Error(await readApiError(res));
       setUserId(data.userId);
       setMode("unlock");
       saveSession({ userId: data.userId, authVerifierB64 });
@@ -80,7 +88,7 @@ export default function AuthPage() {
         body: JSON.stringify({ userId, authVerifierB64 }),
       });
       const data = (await res.json().catch(() => null)) as null | { ok?: boolean; error?: string };
-      if (!res.ok || !data?.ok) throw new Error(data?.error ?? "login_failed");
+      if (!res.ok || !data?.ok) throw new Error(await readApiError(res));
 
       saveSession({ userId, authVerifierB64 });
       setStatus({ kind: "ok", userId });
