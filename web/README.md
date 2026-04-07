@@ -1,4 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Opaque Vault (prototype)
+
+Zero-knowledge password manager prototype:
+
+- **Client**: derives keys in-browser via WebCrypto (PBKDF2 → AES-256-GCM).
+- **Server**: a “dumb locker” that stores only ciphertext + IV + KDF params in Turso/libSQL.
+
+### Local setup
+
+1. Create a Turso database and apply the schema in `src/lib/schema.sql`.
+2. Create `web/.env.local` with:
+
+```bash
+TURSO_DATABASE_URL="libsql://..."
+TURSO_AUTH_TOKEN="..."
+```
+
+3. Install and run:
+
+```bash
+npm install
+npm run dev
+```
+
+### Prototype flow
+
+- Visit `/auth` to register or unlock. The client derives an **auth verifier** locally and sends it to the server.
+- Visit `/vault` to unlock locally (key stays in-memory), list/decrypt items client-side, and add an encrypted demo entry.
+
+### Notes
+
+- This prototype uses **header-based auth** (userId + verifier) and is not production-ready.
+- In production, add a real session mechanism (httpOnly cookie) and avoid storing any verifier in localStorage.
 
 ## Getting Started
 
