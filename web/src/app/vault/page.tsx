@@ -60,15 +60,22 @@ export default function VaultPage() {
     const onActivity = () => {
       if (status === "unlocked") resetAutoLock();
     };
+    const onBlurOrHide = () => {
+      lock();
+    };
     window.addEventListener("mousemove", onActivity);
     window.addEventListener("keydown", onActivity);
     window.addEventListener("mousedown", onActivity);
     window.addEventListener("touchstart", onActivity);
+    window.addEventListener("blur", onBlurOrHide);
+    document.addEventListener("visibilitychange", onBlurOrHide);
     return () => {
       window.removeEventListener("mousemove", onActivity);
       window.removeEventListener("keydown", onActivity);
       window.removeEventListener("mousedown", onActivity);
       window.removeEventListener("touchstart", onActivity);
+      window.removeEventListener("blur", onBlurOrHide);
+      document.removeEventListener("visibilitychange", onBlurOrHide);
       if (lockTimer.current) window.clearTimeout(lockTimer.current);
     };
   }, [resetAutoLock, status]);
