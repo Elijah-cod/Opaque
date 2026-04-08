@@ -11,6 +11,11 @@ CREATE TABLE IF NOT EXISTS users (
   -- Production auth
   email TEXT,
 
+  -- Vault KDF params (salt is not secret)
+  vault_version INTEGER NOT NULL DEFAULT 1,
+  vault_salt_b64 TEXT,
+  vault_iterations INTEGER,
+
   -- Legacy auth (temporary migration support)
   auth_salt_b64 TEXT,
   auth_iterations INTEGER,

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { newSessionToken, setSessionCookie, SESSION_TTL_MS } from "@/lib/serverSession";
 import { OTP_MAX_ATTEMPTS, safeEqual, sha256Base64Url } from "@/lib/otp";
+import { randomBytes } from "node:crypto";
+import { PBKDF2_ITERATIONS, SALT_BYTES } from "@/lib/zkcrypto";
 
 const Body = z.object({
   email: z.string().email().max(320),
@@ -45,6 +47,22 @@ export async function POST(req: Request) {
   const userRes = await db.execute({ sql: "SELECT id FROM users WHERE email = ? LIMIT 1", args: [email] });
   const userRow = userRes.rows[0] as unknown as undefined | { id: string };
   if (!userRow) return NextResponse.json({ error: "invalid_code" }, { status: 401 });
+
+  // Ensure per-user vault KDF params exist.
+  const kdfRes = await db.execute({
+    sql: "SELECT vault_salt_b64, vault_iterations, vault_version FROM users WHERE id = ? LIMIT 1",
+    args: [userRow.id],
+  });
+  const kdfRow = kdfRes.rows[0] as unknown as
+    | undefined
+    | { vault_salt_b64: string | null; vault_iterations: number | null; vault_version: number | null };
+  if (!kdfRow?.vault_salt_b64 || !kdfRow?.vault_iterations || !kdfRow?.vault_version) {
+    const saltB64 = Buffer.from(randomBytes(SALT_BYTES)).toString("base64");
+    await db.execute({
+      sql: "UPDATE users SET vault_version = COALESCE(vault_version, 1), vault_salt_b64 = ?, vault_iterations = ? WHERE id = ?",
+      args: [saltB64, PBKDF2_ITERATIONS, userRow.id],
+    });
+  }
 
   const token = newSessionToken();
   const tokenHash = sha256Base64Url(token);

@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { clearSession, loadSession } from "@/lib/session";
-import { decryptJson, deriveAesGcmKey, importPasswordKey, PBKDF2_ITERATIONS, SALT_BYTES } from "@/lib/zkcrypto";
-import { randomBytes } from "@/lib/zkcrypto";
+import { decryptJson, deriveAesGcmKey, importPasswordKey, PBKDF2_ITERATIONS } from "@/lib/zkcrypto";
 import { encryptJson } from "@/lib/zkcrypto";
 
 type VaultItemCipher = {
@@ -37,6 +36,8 @@ export default function VaultPage() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<Array<{ id: string; updatedAt: number; plain: VaultItemPlain }>>([]);
   const aesKeyRef = useRef<CryptoKey | null>(null);
+  const vaultSaltB64Ref = useRef<string | null>(null);
+  const vaultIterationsRef = useRef<number | null>(null);
   const session = useMemo(() => loadSession(), []);
 
   const lockTimer = useRef<number | null>(null);
@@ -95,6 +96,18 @@ export default function VaultPage() {
     try {
       const passwordKey = await importPasswordKey(masterPassword);
 
+      const kdfRes = await authFetch("/api/vault/kdf");
+      const kdf = (await kdfRes.json().catch(() => null)) as
+        | null
+        | { vaultSaltB64?: string; vaultIterations?: number; error?: string };
+      if (!kdfRes.ok || !kdf?.vaultSaltB64 || !kdf?.vaultIterations) {
+        throw new Error(kdf?.error ?? "vault_kdf_failed");
+      }
+      const vaultSalt = b64ToBytes(kdf.vaultSaltB64);
+      const vaultIterations = kdf.vaultIterations;
+      vaultSaltB64Ref.current = kdf.vaultSaltB64;
+      vaultIterationsRef.current = vaultIterations;
+
       const res = await authFetch("/api/vault/list");
       const data = (await res.json()) as { items: VaultItemCipher[] } | { error: string };
       if (!res.ok || "error" in data) throw new Error("vault_list_failed");
@@ -104,8 +117,8 @@ export default function VaultPage() {
       for (const it of data.items) {
         const aesKey = await deriveAesGcmKey({
           passwordKey,
-          salt: b64ToBytes(it.enc_salt_b64),
-          iterations: it.enc_iterations,
+          salt: vaultSalt,
+          iterations: vaultIterations,
         });
         const plain = await decryptJson<VaultItemPlain>({
           key: aesKey,
@@ -115,12 +128,10 @@ export default function VaultPage() {
         plains.push({ id: it.id, updatedAt: it.updated_at, plain });
       }
 
-      // Cache the last-derived key only as a convenience for creates;
-      // real design should use a single per-user vault salt stored server-side.
       aesKeyRef.current = await deriveAesGcmKey({
         passwordKey,
-        salt: randomBytes(SALT_BYTES),
-        iterations: PBKDF2_ITERATIONS,
+        salt: vaultSalt,
+        iterations: vaultIterations,
       });
 
       setItems(plains);
@@ -142,8 +153,11 @@ export default function VaultPage() {
     }
     try {
       const passwordKey = await importPasswordKey(masterPassword);
-      const encSalt = randomBytes(SALT_BYTES);
-      const aesKey = await deriveAesGcmKey({ passwordKey, salt: encSalt, iterations: PBKDF2_ITERATIONS });
+      const vaultSaltB64 = vaultSaltB64Ref.current;
+      const vaultIterations = vaultIterationsRef.current ?? PBKDF2_ITERATIONS;
+      if (!vaultSaltB64) throw new Error("vault_locked");
+      const saltBytes = b64ToBytes(vaultSaltB64);
+      const aesKey = await deriveAesGcmKey({ passwordKey, salt: saltBytes, iterations: vaultIterations });
 
       const payload: VaultItemPlain = {
         title: `Demo ${new Date().toLocaleTimeString()}`,
@@ -157,8 +171,8 @@ export default function VaultPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          encSaltB64: btoa(String.fromCharCode(...encSalt)),
-          encIterations: PBKDF2_ITERATIONS,
+          encSaltB64: vaultSaltB64,
+          encIterations: vaultIterations,
           ivB64,
           ciphertextB64,
           // Server expects `metadata` to be a string or omitted (not `null`).

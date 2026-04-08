@@ -4,6 +4,11 @@
 -- Add production auth fields to users (legacy columns may already exist).
 ALTER TABLE users ADD COLUMN email TEXT;
 
+-- Add vault KDF params (salt is not secret).
+ALTER TABLE users ADD COLUMN vault_version INTEGER;
+ALTER TABLE users ADD COLUMN vault_salt_b64 TEXT;
+ALTER TABLE users ADD COLUMN vault_iterations INTEGER;
+
 -- Ensure legacy columns exist (older schema had these NOT NULL; if you already have them, these may fail).
 ALTER TABLE users ADD COLUMN auth_salt_b64 TEXT;
 ALTER TABLE users ADD COLUMN auth_iterations INTEGER;
