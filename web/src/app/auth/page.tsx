@@ -7,14 +7,25 @@ import { saveSession } from "@/lib/session";
 
 type Status = { kind: "idle" } | { kind: "working" } | { kind: "ok"; userId: string } | { kind: "error"; message: string };
 
-async function readApiError(res: Response): Promise<string> {
-  const text = await res.text().catch(() => "");
+function parseApiError(status: number, rawBody: string): string {
+  const text = rawBody || "";
   try {
     const json = JSON.parse(text) as { error?: string; detail?: string };
-    return [json.error, json.detail].filter(Boolean).join(": ") || `http_${res.status}`;
+    return [json.error, json.detail].filter(Boolean).join(": ") || `http_${status}`;
   } catch {
-    return text || `http_${res.status}`;
+    return text || `http_${status}`;
   }
+}
+
+async function readJsonOnce<T>(res: Response): Promise<{ ok: boolean; status: number; bodyText: string; json: T | null }> {
+  const bodyText = await res.text().catch(() => "");
+  let json: T | null = null;
+  try {
+    json = JSON.parse(bodyText) as T;
+  } catch {
+    json = null;
+  }
+  return { ok: res.ok, status: res.status, bodyText, json };
 }
 
 export default function AuthPage() {
@@ -49,12 +60,13 @@ export default function AuthPage() {
           authVerifierB64,
         }),
       });
-      const data = (await res.json().catch(() => null)) as null | { userId?: string; error?: string };
-      if (!res.ok || !data?.userId) throw new Error(await readApiError(res));
-      setUserId(data.userId);
+      const parsed = await readJsonOnce<{ userId?: string; error?: string; detail?: string }>(res);
+      const userIdFromRes = parsed.json?.userId;
+      if (!parsed.ok || !userIdFromRes) throw new Error(parseApiError(parsed.status, parsed.bodyText));
+      setUserId(userIdFromRes);
       setMode("unlock");
-      saveSession({ userId: data.userId, authVerifierB64 });
-      setStatus({ kind: "ok", userId: data.userId });
+      saveSession({ userId: userIdFromRes, authVerifierB64 });
+      setStatus({ kind: "ok", userId: userIdFromRes });
     } catch (e) {
       setStatus({ kind: "error", message: e instanceof Error ? e.message : "unknown_error" });
     }
@@ -87,8 +99,8 @@ export default function AuthPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ userId, authVerifierB64 }),
       });
-      const data = (await res.json().catch(() => null)) as null | { ok?: boolean; error?: string };
-      if (!res.ok || !data?.ok) throw new Error(await readApiError(res));
+      const parsed = await readJsonOnce<{ ok?: boolean; error?: string; detail?: string }>(res);
+      if (!parsed.ok || !parsed.json?.ok) throw new Error(parseApiError(parsed.status, parsed.bodyText));
 
       saveSession({ userId, authVerifierB64 });
       setStatus({ kind: "ok", userId });
