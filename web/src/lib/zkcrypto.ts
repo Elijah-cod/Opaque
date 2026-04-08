@@ -72,15 +72,14 @@ export async function encryptJson(args: {
   const subtle = requireWebCrypto();
   const iv = args.iv ?? randomBytes(AES_GCM_IV_BYTES);
   const plaintext = te.encode(JSON.stringify(args.payload));
-  const ciphertext = await subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv: iv as unknown as BufferSource,
-      additionalData: args.additionalData as unknown as BufferSource | undefined,
-    },
-    args.key,
-    plaintext as unknown as BufferSource,
-  );
+  const params: AesGcmParams & { additionalData?: BufferSource } = {
+    name: "AES-GCM",
+    iv: iv as unknown as BufferSource,
+  };
+  if (args.additionalData) {
+    params.additionalData = args.additionalData as unknown as BufferSource;
+  }
+  const ciphertext = await subtle.encrypt(params, args.key, plaintext as unknown as BufferSource);
   return {
     ciphertextB64: bytesToBase64(new Uint8Array(ciphertext)),
     ivB64: bytesToBase64(iv),
@@ -96,15 +95,14 @@ export async function decryptJson<T>(args: {
   const subtle = requireWebCrypto();
   const iv = base64ToBytes(args.ivB64);
   const ciphertextBytes = base64ToBytes(args.ciphertextB64);
-  const plaintext = await subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: iv as unknown as BufferSource,
-      additionalData: args.additionalData as unknown as BufferSource | undefined,
-    },
-    args.key,
-    ciphertextBytes as unknown as BufferSource,
-  );
+  const params: AesGcmParams & { additionalData?: BufferSource } = {
+    name: "AES-GCM",
+    iv: iv as unknown as BufferSource,
+  };
+  if (args.additionalData) {
+    params.additionalData = args.additionalData as unknown as BufferSource;
+  }
+  const plaintext = await subtle.decrypt(params, args.key, ciphertextBytes as unknown as BufferSource);
   return JSON.parse(td.decode(new Uint8Array(plaintext))) as T;
 }
 
