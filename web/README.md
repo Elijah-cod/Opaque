@@ -1,18 +1,21 @@
-## Opaque Vault (prototype)
+## Opaque Vault
 
-Zero-knowledge password manager prototype:
+Zero-knowledge password manager:
 
 - **Client**: derives keys in-browser via WebCrypto (PBKDF2 → AES-256-GCM).
-- **Server**: a “dumb locker” that stores only ciphertext + IV + KDF params in Turso/libSQL.
+- **Server**: a “dumb locker” that stores ciphertext + non-sensitive metadata in Turso/libSQL.
 
 ### Local setup
 
 1. Create a Turso database and apply the schema in `src/lib/schema.sql`.
-2. Create `web/.env.local` with:
+   - If you created a DB using an older schema, apply `src/lib/migrations/001_prod_auth.sql` once.
+2. Create `web/.env.local`:
 
 ```bash
 TURSO_DATABASE_URL="libsql://..."
 TURSO_AUTH_TOKEN="..."
+RESEND_API_KEY="re_..."
+RESEND_FROM="Opaque Vault <noreply@yourdomain.com>"
 ```
 
 3. Install and run:
@@ -22,15 +25,15 @@ npm install
 npm run dev
 ```
 
-### Prototype flow
+### User flow (non-technical)
 
-- Visit `/auth` to register or unlock. The client derives an **auth verifier** locally and sends it to the server.
-- Visit `/vault` to unlock locally (key stays in-memory), list/decrypt items client-side, and add an encrypted demo entry.
+- Visit `/auth` to sign in via a **6-digit email code**.
+- Visit `/vault` to unlock the vault locally with your **master password** (never sent to the server).
 
 ### Notes
 
-- This prototype uses **header-based auth** (userId + verifier) and is not production-ready.
-- In production, add a real session mechanism (httpOnly cookie) and avoid storing any verifier in localStorage.
+- The app uses **httpOnly session cookies** for server auth.
+- Vault encryption keys remain in browser memory and auto-lock on inactivity / tab blur.
 
 ## Getting Started
 

@@ -16,6 +16,9 @@ export async function POST(req: Request) {
   // Soft-fail if email provider isn't configured yet.
   const resendApiKey = process.env.RESEND_API_KEY;
   const resendFrom = process.env.RESEND_FROM;
+  if (process.env.NODE_ENV === "production" && (!resendApiKey || !resendFrom)) {
+    return NextResponse.json({ error: "email_provider_not_configured" }, { status: 500 });
+  }
 
   const db = getDb();
   const email = parsed.data.email.trim().toLowerCase();
