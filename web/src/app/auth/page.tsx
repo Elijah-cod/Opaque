@@ -1,11 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { AUTH_ITERATIONS, AUTH_SALT_BYTES, authSaltToB64, deriveAuthVerifierB64 } from "@/lib/zkAuth";
-import { randomBytes } from "@/lib/zkcrypto";
-import { saveSession } from "@/lib/session";
+import { bytesToBase64Url } from "@/lib/base64url";
 
-type Status = { kind: "idle" } | { kind: "working" } | { kind: "ok"; userId: string } | { kind: "error"; message: string };
+type Step = "email" | "code" | "done";
+type Status = { kind: "idle" } | { kind: "working" } | { kind: "error"; message: string };
 
 function parseApiError(status: number, rawBody: string): string {
   const text = rawBody || "";
@@ -29,81 +29,53 @@ async function readJsonOnce<T>(res: Response): Promise<{ ok: boolean; status: nu
 }
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<"register" | "unlock">("register");
-  const [userId, setUserId] = useState("");
-  const [masterPassword, setMasterPassword] = useState("");
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
 
   const canSubmit = useMemo(() => {
-    if (!masterPassword) return false;
-    if (mode === "unlock") return !!userId;
-    return true;
-  }, [masterPassword, mode, userId]);
+    if (step === "email") return !!email;
+    if (step === "code") return !!email && /^\d{6}$/.test(code);
+    return false;
+  }, [code, email, step]);
 
-  async function onRegister() {
+  async function onRequestOtp() {
     setStatus({ kind: "working" });
     try {
-      const authSalt = randomBytes(AUTH_SALT_BYTES);
-      const authSaltB64 = authSaltToB64(authSalt);
-      const authVerifierB64 = await deriveAuthVerifierB64({
-        masterPassword,
-        authSalt,
-        iterations: AUTH_ITERATIONS,
-      });
-
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch("/api/auth/request-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          authSaltB64,
-          authIterations: AUTH_ITERATIONS,
-          authVerifierB64,
-        }),
+        body: JSON.stringify({ email }),
       });
-      const parsed = await readJsonOnce<{ userId?: string; error?: string; detail?: string }>(res);
-      const userIdFromRes = parsed.json?.userId;
-      if (!parsed.ok || !userIdFromRes) throw new Error(parseApiError(parsed.status, parsed.bodyText));
-      setUserId(userIdFromRes);
-      setMode("unlock");
-      saveSession({ userId: userIdFromRes, authVerifierB64 });
-      setStatus({ kind: "ok", userId: userIdFromRes });
+      const parsed = await readJsonOnce<{ ok?: boolean; error?: string; detail?: string }>(res);
+      if (!parsed.ok) throw new Error(parseApiError(parsed.status, parsed.bodyText));
+      setStatus({ kind: "idle" });
+      setStep("code");
     } catch (e) {
       setStatus({ kind: "error", message: e instanceof Error ? e.message : "unknown_error" });
     }
   }
 
-  async function onUnlock() {
+  async function onVerifyOtp() {
     setStatus({ kind: "working" });
     try {
-      const ch = await fetch("/api/auth/challenge", {
+      const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      const challenge = (await ch.json().catch(() => null)) as
-        | null
-        | { authSaltB64?: string; authIterations?: number; error?: string };
-      if (!ch.ok || !challenge?.authSaltB64 || !challenge?.authIterations) {
-        throw new Error(challenge?.error ?? "challenge_failed");
-      }
-
-      const authSalt = Uint8Array.from(atob(challenge.authSaltB64), (c) => c.charCodeAt(0));
-      const authVerifierB64 = await deriveAuthVerifierB64({
-        masterPassword,
-        authSalt,
-        iterations: challenge.authIterations,
-      });
-
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userId, authVerifierB64 }),
+        body: JSON.stringify({ email, code }),
       });
       const parsed = await readJsonOnce<{ ok?: boolean; error?: string; detail?: string }>(res);
       if (!parsed.ok || !parsed.json?.ok) throw new Error(parseApiError(parsed.status, parsed.bodyText));
 
-      saveSession({ userId, authVerifierB64 });
-      setStatus({ kind: "ok", userId });
+      // Generate a “recovery kit” code for the user to store safely.
+      // This is a UX flow; full cryptographic recovery will be wired to wrapped keys in a later hardening pass.
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      const rc = bytesToBase64Url(bytes);
+      setRecoveryCode(rc);
+      setStatus({ kind: "idle" });
+      setStep("done");
     } catch (e) {
       setStatus({ kind: "error", message: e instanceof Error ? e.message : "unknown_error" });
     }
@@ -112,67 +84,74 @@ export default function AuthPage() {
   return (
     <div className="min-h-dvh bg-zinc-50 px-6 py-12 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <div className="mx-auto w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h1 className="text-2xl font-semibold tracking-tight">Vault access</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Prototype auth: server verifies a PBKDF2-derived verifier (not your password), and never sees your vault key.
+          We’ll email you a one-time code. Your master password is only used on your device to unlock your vault.
         </p>
 
-        <div className="mt-6 flex gap-2 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
-          <button
-            className={`h-10 flex-1 rounded-lg text-sm font-medium ${mode === "register" ? "bg-white shadow-sm dark:bg-zinc-950" : "text-zinc-600 dark:text-zinc-300"}`}
-            onClick={() => setMode("register")}
-            type="button"
-          >
-            Create
-          </button>
-          <button
-            className={`h-10 flex-1 rounded-lg text-sm font-medium ${mode === "unlock" ? "bg-white shadow-sm dark:bg-zinc-950" : "text-zinc-600 dark:text-zinc-300"}`}
-            onClick={() => setMode("unlock")}
-            type="button"
-          >
-            Unlock
-          </button>
-        </div>
+        <label className="mt-6 block">
+          <span className="text-sm font-medium">Email address</span>
+          <input
+            className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-700"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            placeholder="you@example.com"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+        </label>
 
-        {mode === "unlock" && (
-          <label className="mt-6 block">
-            <span className="text-sm font-medium">User ID</span>
+        {step === "code" && (
+          <label className="mt-4 block">
+            <span className="text-sm font-medium">6-digit code</span>
             <input
               className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-700"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              placeholder="Paste your user id"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputMode="numeric"
+              placeholder="123456"
+              autoComplete="one-time-code"
             />
           </label>
         )}
-
-        <label className="mt-6 block">
-          <span className="text-sm font-medium">Master password</span>
-          <input
-            className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-700"
-            value={masterPassword}
-            onChange={(e) => setMasterPassword(e.target.value)}
-            type="password"
-            placeholder="Never sent to server"
-          />
-        </label>
 
         <button
           className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
           type="button"
           disabled={!canSubmit || status.kind === "working"}
-          onClick={mode === "register" ? onRegister : onUnlock}
+          onClick={step === "email" ? onRequestOtp : onVerifyOtp}
         >
-          {status.kind === "working" ? "Working…" : mode === "register" ? "Create vault" : "Unlock"}
+          {status.kind === "working"
+            ? "Working…"
+            : step === "email"
+              ? "Send code"
+              : step === "code"
+                ? "Verify code"
+                : "Continue"}
         </button>
 
-        {status.kind === "ok" && (
+        {step === "done" && (
           <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-            <div className="font-medium">Unlocked</div>
-            <div className="mt-1 break-all text-xs opacity-90">User ID: {status.userId}</div>
+            <div className="font-medium">You’re signed in</div>
+            <div className="mt-2 text-xs opacity-90">
+              Next, unlock your vault on the Vault page using your master password.
+            </div>
+            {recoveryCode && (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-white/60 p-3 text-xs dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                <div className="font-semibold">Recovery kit (save this)</div>
+                <div className="mt-2 break-all font-mono">{recoveryCode}</div>
+                <div className="mt-2 opacity-90">
+                  Store this somewhere safe. If you lose your master password, recovery may not be possible.
+                </div>
+              </div>
+            )}
+            <div className="mt-4">
+              <Link className="font-medium underline" href="/vault">
+                Go to Vault
+              </Link>
+            </div>
           </div>
         )}
         {status.kind === "error" && (
