@@ -1,10 +1,5 @@
 import { createClient } from "@libsql/client";
-
-function mustGetEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing required env var ${name}`);
-  return v;
-}
+import { mustGetEnv } from "@/lib/env";
 
 export function getDb() {
   const url = mustGetEnv("TURSO_DATABASE_URL");
