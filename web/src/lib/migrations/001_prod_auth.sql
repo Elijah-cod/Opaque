@@ -1,21 +1,13 @@
--- Zero-knowledge password manager schema.
--- Server stores only ciphertext and key-derivation parameters, never plaintext.
+-- Migration for DBs created before production auth existed.
+-- Run once; if a statement errors because it already ran, you can ignore it.
 
--- Fresh/prod schema. For existing DBs created before production auth,
--- apply `src/lib/migrations/001_prod_auth.sql` instead.
+-- Add production auth fields to users (legacy columns may already exist).
+ALTER TABLE users ADD COLUMN email TEXT;
 
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  created_at INTEGER NOT NULL,
-
-  -- Production auth
-  email TEXT,
-
-  -- Legacy auth (temporary migration support)
-  auth_salt_b64 TEXT,
-  auth_iterations INTEGER,
-  auth_verifier_b64 TEXT
-);
+-- Ensure legacy columns exist (older schema had these NOT NULL; if you already have them, these may fail).
+ALTER TABLE users ADD COLUMN auth_salt_b64 TEXT;
+ALTER TABLE users ADD COLUMN auth_iterations INTEGER;
+ALTER TABLE users ADD COLUMN auth_verifier_b64 TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
 
@@ -26,7 +18,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
-
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 
@@ -38,26 +29,6 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   last_sent_at INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS vault_items (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-
-  -- Client-side encryption parameters.
-  enc_salt_b64 TEXT NOT NULL,
-  enc_iterations INTEGER NOT NULL,
-  iv_b64 TEXT NOT NULL,
-  ciphertext_b64 TEXT NOT NULL,
-
-  -- Optional server-visible metadata (trade-off: enables search).
-  metadata TEXT,
-
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_vault_items_user_id ON vault_items(user_id);
-
 CREATE TABLE IF NOT EXISTS vault_item_metadata (
   vault_item_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -67,7 +38,6 @@ CREATE TABLE IF NOT EXISTS vault_item_metadata (
   FOREIGN KEY (vault_item_id) REFERENCES vault_items(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
-
 CREATE INDEX IF NOT EXISTS idx_vault_item_metadata_user_id ON vault_item_metadata(user_id);
 CREATE INDEX IF NOT EXISTS idx_vault_item_metadata_title ON vault_item_metadata(user_id, title);
 CREATE INDEX IF NOT EXISTS idx_vault_item_metadata_url_host ON vault_item_metadata(user_id, url_host);
