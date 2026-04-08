@@ -5,15 +5,33 @@ import { requireUser } from "@/lib/serverAuth";
 export async function GET(req: Request) {
   try {
     const { userId } = await requireUser(req);
+    const url = new URL(req.url);
+    const q = (url.searchParams.get("q") ?? "").trim();
     const db = getDb();
     const res = await db.execute({
       sql: `
-        SELECT id, updated_at, enc_salt_b64, enc_iterations, iv_b64, ciphertext_b64, metadata
-        FROM vault_items
-        WHERE user_id = ?
+        SELECT
+          v.id,
+          v.updated_at,
+          v.enc_salt_b64,
+          v.enc_iterations,
+          v.iv_b64,
+          v.ciphertext_b64,
+          v.metadata,
+          m.title as title,
+          m.url_host as url_host,
+          m.tags as tags
+        FROM vault_items v
+        LEFT JOIN vault_item_metadata m ON m.vault_item_id = v.id
+        WHERE v.user_id = ?
+          AND (
+            ? = '' OR
+            COALESCE(m.title, '') LIKE '%' || ? || '%' OR
+            COALESCE(m.url_host, '') LIKE '%' || ? || '%'
+          )
         ORDER BY updated_at DESC
       `,
-      args: [userId],
+      args: [userId, q, q, q],
     });
     return NextResponse.json({ items: res.rows });
   } catch {

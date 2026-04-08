@@ -10,6 +10,9 @@ const CreateBody = z.object({
   ivB64: z.string().min(1),
   ciphertextB64: z.string().min(1),
   metadata: z.string().nullable().optional(),
+  title: z.string().max(200).nullable().optional(),
+  urlHost: z.string().max(255).nullable().optional(),
+  tags: z.string().max(500).nullable().optional(),
 });
 
 const UpdateBody = CreateBody.extend({ id: z.string().min(1) });
@@ -43,6 +46,19 @@ export async function POST(req: Request) {
         parsed.data.metadata ?? null,
       ],
     });
+
+    await db.execute({
+      sql: `
+        INSERT INTO vault_item_metadata (vault_item_id, user_id, title, url_host, tags)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(vault_item_id) DO UPDATE SET
+          title = excluded.title,
+          url_host = excluded.url_host,
+          tags = excluded.tags
+      `,
+      args: [id, userId, parsed.data.title ?? null, parsed.data.urlHost ?? null, parsed.data.tags ?? null],
+    });
+
     return NextResponse.json({ id });
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -75,6 +91,25 @@ export async function PUT(req: Request) {
         userId,
       ],
     });
+
+    await db.execute({
+      sql: `
+        INSERT INTO vault_item_metadata (vault_item_id, user_id, title, url_host, tags)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(vault_item_id) DO UPDATE SET
+          title = excluded.title,
+          url_host = excluded.url_host,
+          tags = excluded.tags
+      `,
+      args: [
+        parsed.data.id,
+        userId,
+        parsed.data.title ?? null,
+        parsed.data.urlHost ?? null,
+        parsed.data.tags ?? null,
+      ],
+    });
+
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
