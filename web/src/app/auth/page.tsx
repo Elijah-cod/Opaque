@@ -81,6 +81,32 @@ export default function AuthPage() {
     }
   }
 
+  function downloadRecoveryKit() {
+    if (!recoveryCode) return;
+    const contents = [
+      "Opaque Vault — Recovery Kit",
+      "",
+      "Recovery code (save this somewhere safe):",
+      recoveryCode,
+      "",
+      "What this is:",
+      "- This code is a backup credential you should store offline (password manager, print, etc.).",
+      "- If you lose your master password, your vault may be unrecoverable.",
+      "",
+      "Do NOT share this code.",
+      "",
+    ].join("\n");
+    const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "opaque-recovery-kit.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="min-h-dvh bg-zinc-50 px-6 py-12 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <div className="mx-auto w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -145,6 +171,13 @@ export default function AuthPage() {
                 <div className="mt-2 opacity-90">
                   Store this somewhere safe. If you lose your master password, recovery may not be possible.
                 </div>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex h-9 items-center justify-center rounded-lg bg-emerald-700 px-3 text-xs font-medium text-white hover:bg-emerald-600 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
+                  onClick={downloadRecoveryKit}
+                >
+                  Download recovery kit
+                </button>
               </div>
             )}
             <div className="mt-4">
