@@ -161,7 +161,8 @@ export default function VaultPage() {
           encIterations: PBKDF2_ITERATIONS,
           ivB64,
           ciphertextB64,
-          metadata: null,
+          // Server expects `metadata` to be a string or omitted (not `null`).
+          metadata: undefined,
         }),
       });
       const data = (await res.json().catch(() => null)) as null | { id?: string; error?: string };
