@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { requireUserFromHeaders } from "@/lib/serverAuth";
+import { requireUser } from "@/lib/serverAuth";
 
 export async function GET(req: Request) {
   try {
-    const { userId } = await requireUserFromHeaders(req);
+    const { userId } = await requireUser(req);
     const db = getDb();
     const res = await db.execute({
       sql: `

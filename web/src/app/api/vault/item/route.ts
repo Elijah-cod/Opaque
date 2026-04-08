@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { requireUserFromHeaders } from "@/lib/serverAuth";
+import { requireUser } from "@/lib/serverAuth";
 import { newId } from "@/lib/id";
 
 const CreateBody = z.object({
@@ -17,7 +17,7 @@ const DeleteBody = z.object({ id: z.string().min(1) });
 
 export async function POST(req: Request) {
   try {
-    const { userId } = await requireUserFromHeaders(req);
+    const { userId } = await requireUser(req);
     const json = await req.json().catch(() => null);
     const parsed = CreateBody.safeParse(json);
     if (!parsed.success) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const { userId } = await requireUserFromHeaders(req);
+    const { userId } = await requireUser(req);
     const json = await req.json().catch(() => null);
     const parsed = UpdateBody.safeParse(json);
     if (!parsed.success) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
@@ -83,7 +83,7 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const { userId } = await requireUserFromHeaders(req);
+    const { userId } = await requireUser(req);
     const json = await req.json().catch(() => null);
     const parsed = DeleteBody.safeParse(json);
     if (!parsed.success) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
