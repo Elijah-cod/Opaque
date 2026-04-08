@@ -9,7 +9,7 @@ const CreateBody = z.object({
   encIterations: z.number().int().positive(),
   ivB64: z.string().min(1),
   ciphertextB64: z.string().min(1),
-  metadata: z.string().optional(),
+  metadata: z.string().nullable().optional(),
 });
 
 const UpdateBody = CreateBody.extend({ id: z.string().min(1) });
