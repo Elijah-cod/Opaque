@@ -73,19 +73,19 @@ export default function VaultPage() {
   }, [resetAutoLock, status]);
 
   async function authFetch(input: string, init?: RequestInit) {
-    if (!session) throw new Error("missing_session");
+    // Production path: rely on httpOnly session cookie.
+    // Temporary fallback: if legacy session exists, attach headers (requires OPAQUE_ENABLE_LEGACY_AUTH=1 server-side).
     const headers = new Headers(init?.headers ?? {});
-    headers.set("x-user-id", session.userId);
-    headers.set("x-auth-verifier", session.authVerifierB64);
-    return fetch(input, { ...init, headers });
+    if (session?.userId && session?.authVerifierB64) {
+      headers.set("x-user-id", session.userId);
+      headers.set("x-auth-verifier", session.authVerifierB64);
+    }
+    return fetch(input, { ...init, headers, credentials: "include" });
   }
 
   async function unlockAndLoad() {
     setError(null);
-    if (!session) {
-      setError("No session found. Go to /auth first.");
-      return;
-    }
+    // If using cookie sessions, the UI doesn't need localStorage session at all.
     if (!masterPassword) {
       setError("Enter your master password.");
       return;
@@ -192,21 +192,19 @@ export default function VaultPage() {
             <button
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 px-3 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-              onClick={() => {
-                clearSession();
-                lock();
+              onClick={async () => {
+                try {
+                  await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+                } finally {
+                  clearSession();
+                  lock();
+                }
               }}
             >
               Sign out
             </button>
           </div>
         </div>
-
-        {!session && (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
-            Missing session. Go to <Link className="underline" href="/auth">/auth</Link>.
-          </div>
-        )}
 
         {status !== "unlocked" && (
           <div className="mt-6 grid gap-3">
@@ -223,7 +221,7 @@ export default function VaultPage() {
             <button
               className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
               type="button"
-              disabled={!session || !masterPassword || status === "unlocking"}
+              disabled={!masterPassword || status === "unlocking"}
               onClick={unlockAndLoad}
             >
               {status === "unlocking" ? "Unlocking…" : "Unlock vault"}
