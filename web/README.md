@@ -16,6 +16,7 @@ TURSO_DATABASE_URL="libsql://..."
 TURSO_AUTH_TOKEN="..."
 RESEND_API_KEY="re_..."
 RESEND_FROM="Opaque Vault <noreply@yourdomain.com>"
+OPAQUE_ENABLE_LEGACY_AUTH="1"
 ```
 
 3. Install and run:
@@ -27,8 +28,9 @@ npm run dev
 
 ### User flow (non-technical)
 
-- Visit `/auth` to sign in via a **6-digit email code**.
-- Visit `/vault` to unlock the vault locally with your **master password** (never sent to the server).
+- **Free mode**: Visit `/auth`, create a vault, save your User ID, then unlock with User ID + master password.
+- **OTP mode (optional)**: keep `RESEND_*` configured and use email OTP routes.
+- Visit `/vault` to unlock locally with your **master password** (never sent to the server).
 
 ### Notes
 

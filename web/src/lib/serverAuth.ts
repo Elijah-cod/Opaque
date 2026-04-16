@@ -35,7 +35,7 @@ export async function requireUser(req: Request): Promise<{ userId: string; email
     return await requireUserFromSessionCookie();
   } catch {
     // Optional fallback while migrating to OTP sessions.
-    const legacy = getEnv("OPAQUE_ENABLE_LEGACY_AUTH") === "1";
+    const legacy = getEnv("OPAQUE_ENABLE_LEGACY_AUTH") !== "0";
     if (!legacy) throw new Error("unauthorized");
     return await requireUserLegacyFromHeaders(req);
   }
