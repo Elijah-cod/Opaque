@@ -71,6 +71,7 @@ export default function VaultPage() {
   const session = useMemo(() => loadSession(), []);
 
   const lockTimer = useRef<number | null>(null);
+  const autoUnlockTriedRef = useRef(false);
 
   function lock() {
     aesKeyRef.current = null;
@@ -114,6 +115,32 @@ export default function VaultPage() {
       if (lockTimer.current) window.clearTimeout(lockTimer.current);
     };
   }, [resetAutoLock, status]);
+
+  useEffect(() => {
+    if (autoUnlockTriedRef.current) return;
+    autoUnlockTriedRef.current = true;
+    try {
+      const raw = window.sessionStorage.getItem("opaque.unlock_hint.v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { masterPassword?: string; expiresAt?: number };
+      if (!parsed.masterPassword || !parsed.expiresAt || parsed.expiresAt < Date.now()) {
+        window.sessionStorage.removeItem("opaque.unlock_hint.v1");
+        return;
+      }
+      setMasterPassword(parsed.masterPassword);
+    } catch {
+      window.sessionStorage.removeItem("opaque.unlock_hint.v1");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (status !== "locked" || !masterPassword || autoUnlockTriedRef.current === false) return;
+    // Try one automatic unlock from the auth-page handoff.
+    void unlockAndLoad();
+    // Remove hint after first attempt.
+    window.sessionStorage.removeItem("opaque.unlock_hint.v1");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [masterPassword]);
 
   async function authFetch(input: string, init?: RequestInit) {
     // Production path: rely on httpOnly session cookie.

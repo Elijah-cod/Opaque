@@ -32,7 +32,17 @@ export default function AuthPage() {
   const [mode, setMode] = useState<"create" | "unlock">("create");
   const [userId, setUserId] = useState("");
   const [masterPassword, setMasterPassword] = useState("");
+  const [rememberUnlock, setRememberUnlock] = useState(true);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+
+  function stashUnlockHint() {
+    if (!rememberUnlock) return;
+    const expiresAt = Date.now() + 30 * 60 * 1000;
+    window.sessionStorage.setItem(
+      "opaque.unlock_hint.v1",
+      JSON.stringify({ masterPassword, expiresAt }),
+    );
+  }
 
   const canSubmit = useMemo(() => {
     if (!masterPassword) return false;
@@ -67,6 +77,7 @@ export default function AuthPage() {
       setUserId(createdUserId);
       setMode("unlock");
       saveSession({ userId: createdUserId, authVerifierB64 });
+      stashUnlockHint();
       setStatus({ kind: "ok", userId: createdUserId });
     } catch (e) {
       setStatus({ kind: "error", message: e instanceof Error ? e.message : "unknown_error" });
@@ -104,6 +115,7 @@ export default function AuthPage() {
       if (!parsed.ok || !parsed.json?.ok) throw new Error(parseApiError(parsed.status, parsed.bodyText));
 
       saveSession({ userId, authVerifierB64 });
+      stashUnlockHint();
       setStatus({ kind: "ok", userId });
     } catch (e) {
       setStatus({ kind: "error", message: e instanceof Error ? e.message : "unknown_error" });
@@ -157,6 +169,15 @@ export default function AuthPage() {
             />
           </label>
         )}
+
+        <label className="mt-4 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <input
+            type="checkbox"
+            checked={rememberUnlock}
+            onChange={(e) => setRememberUnlock(e.target.checked)}
+          />
+          Remember unlock for this tab (30 minutes)
+        </label>
 
         <button
           className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
